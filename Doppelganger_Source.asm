@@ -58,27 +58,29 @@ l080d:	  jsr l192c		// points to jsr $19e5
           lda #$19
           sta $0319 		//NMI vector to $19fb
           
-          jsr l1f2d		//copy $1fE6-$25E6 to $D000-$D600 and fill $DE00-$DEFF and $DD00-$DDFF
+          jsr l1f2d		//copy $1fb6-$25E6 to $D000-$D600 and fill $DE00-$DEFF and $DD00-$DDFF
           
 l0820:    jmp l08b3
 		 //.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$80,$00,$00,$00,$00,$00
-l1823:    brk
-l1824:    brk
-l1825:    brk
-l1826:    brk
-l1827:    brk
-l1828:    brk
-l1829:    brk
-l182a:    brk
-l182b:    brk
-l182c:    brk		// this holds one byte read from user port after sending A, X and Y at $1f0b
-l182d:    brk
-l182e:    .byte $80 //;10000000
-l182f:    brk
-l1830:    brk
-l1831:    brk
-l1832:    brk
-l1833:    brk
+l0823:    brk
+l0824:    brk		// $02 if C pressed
+l0825:    brk		// $50 if C pressed but if half tracks enabled = $51
+l0826:    brk		// 
+l0827:    brk		// $02 if C pressed but if half tracks enabled = $01
+l0828:    brk		
+l0829:    brk
+l082a:    brk		// this holds one byte read from user port after sending A, X and Y at $1f0b
+
+l082b:    brk		// synchronised tracks Y/N $80/$00
+l082c:    brk		// half tracks Y/N $80/$00 
+l082d:    brk		// track shortening Y/N $80/$00
+l082e:    .byte $80	// verify Y/N $80/$00
+l082f:    brk		// transitions Y/N $80/$00
+
+l0830:    brk
+l0831:    brk
+l0832:    brk
+l0833:    brk
           
 l0834:     ldy #$00
 l0836:    lda $dd0d		// CIA2 ICR - wait for an interrupt
@@ -156,40 +158,40 @@ l08aa:     ldx $dd0d
 l08b3:     				// arrive here after filling I/O space
 			ldx #$e0
           txs
-          jsr l1aac		//switch BASIC out and kernal in
+          jsr l1aac		// switch BASIC out and kernal in
           lda #$00
-          sta $d015		//disable sprites. Timing issues?
+          sta $d015		// disable sprites. Timing issues?
           sta status
           tay
 l08c1:     iny
-          sta $0823,y		//put zero into $0824 to $0833
+          sta $0823,y		// put zero into $0824 to $0833
           cpy #$10
           bne l08c1
           
-          lda #$80
-          sta $082e
+          lda #$80		// 
+          sta $082e		// enable "V"erify by default
           
           lda #$01
           sta $07
           
           lda #$0b
-          sta $d021		//change screen colours
+          sta $d021		// change screen colours
           lda #$0b
           sta $d020
           
-          lda #$13		//cursor HOME
+          lda #$13		// cursor HOME
           jsr chrout
-          jsr l156f		//Print Doppelganger.....
-          jsr l15b8		//print SYNC... Y/N
+          jsr l156f		// Print Doppelganger.....
+          jsr l15b8		// print SYNC... Y/N
           				//		HALF
 			        		//		TRACK
 				    		//		VERIFY					
-          jsr l1678		//print LHS of screen TRACK READ WRITE
-          jsr l1729		//print RHS and 01 02 03 04..... 40 and densities 3,2,1,0
+          jsr l1678		// print LHS of screen TRACK READ WRITE
+          jsr l1729		// print RHS and 01 02 03 04..... 40 and densities 3,2,1,0
 l08ed:     
-		 jsr l15b8		//print SYNC... Y/N   Why a second JSR to here ??
-          jsr l1818		//print Please choose option
-          jsr l17be		//print OPTIONS
+		 jsr l15b8		// print SYNC... Y/N   Why a second JSR to here ??
+          jsr choose_option // $1818		// print Please choose option
+          jsr options  // $17be		// print OPTIONS
           jsr l18aa		// print the following
           
 l08f9:     //.byte $43,$2f,$53,$2f,$48,$2f,$54,$2f,$56,$00	// "c/s/h/t/v" 01000011 01010011 01001000 10011000 10001100
@@ -206,71 +208,85 @@ l0908:
           bmi l0903			// none of the 5 were pressed, go back up
           
 l0912:     txa
-          asl 				// multiply by X by 2
+          asl 				// multiply X by 2
           tax
           lda $0929,x			//get low byte for JMP 
           sta $0922
           lda $092a,x			//get high byte for JMP
           sta $0923
 l0921:     
-			jmp l0921				// this jump address is changed by above instructions c=$09
+			jmp l0921				// this jump address is changed by above instructions c=$0966
 			
 l0924:    .byte $53,$48,$54,$56,$43 	// shtvc
           
 l0929:    .byte $33,$09,$36,$09,$39,$09,$41,$09,$66,$09	//"c"=$0966, "v"=$0941, "t"=$0939, "h"=$0936, "s"=$0933
+
           
-l0933:    ldy #$00
-          .byte $2c		//BIT		//the BIT instruction masks the LDY instruction after it 
-l0936:    ldy #$01
-          .byte $2c		//BIT
-l0939:    ldy #$02
-          
-          jsr l095d			// flip the hi bit of $082b +Y
+l0933:    // S pressed 
+			ldy #$00
+			// skip next 2 LDY instructions due to BIT masking           
+l0935:      	.byte $2c		// BIT instruction so the following looks like BIT $01a0
+	         
+		    // H pressed
+l0936:		ldy #$01
+			// skip next LDY instruction due to BIT masking
+l0938:		.byte $2c		// BIT instruction so the following looks like BIT $02a0
+                    
+   			// T pressed			
+l0939:		ldy #$02      
+ 
+   			// only follow these if S, H or T were pressed
+          jsr l095d			// flip the hi bit of $082b +Y // synchronised tracks Y/N $80/$00
           jmp l08ed			// print OPTIONS: c/s/h/t/v
           
-l0941:    ldy #$03
-          lda $082e
-          bmi l094e			// branch if hi bit set
-          jsr l095d			// flip the hi bit of $082b +Y
+l0941:    // V pressed
+			ldy #$03
+          lda $082e			// Verify Y = $80 or N = $00
+          bmi l094e			// branch if hi bit set "Y"
+          jsr l095d			// flip the hi bit of $082b +Y // synchronised tracks Y/N $80/$00
           jmp l08ed			// print OPTIONS: c/s/h/t/v
           
 l094e:     
 		 lda $082f
-          bpl l0956			// branch if hi bit NOT set
-          jsr l095d			// flip the hi bit of $082b +Y
+          bpl l0956			// branch if hi bit NOT set - $7f or less
+          jsr l095d			// flip the hi bit of $082b +Y // synchronised tracks Y/N $80/$00
           
 l0956:     iny
-          jsr l095d			// flip the hi bit of $082b +Y
+          jsr l095d			// flip the hi bit of $082b +Y // synchronised tracks Y/N $80/$00
           jmp l08ed			// print OPTIONS: c/s/h/t/v
           
-l095d:    lda $082b,y
+l095d:    lda $082b,y			// $082b Y=0 synchronised tracks, Y=1 half tracks, Y=2 track shortening, Y=3 verify, Y=4 transitions
           eor #$80			// 1000 0000 flip the hi bit of $082b +Y
           sta $082b,y
           rts
           
-l0966:    lda #$02
-          sta $0824
-          lda $082c
-          bmi l0976			// branch if hi bit set
+l0966:    // C pressed
+			lda #$02			
+          sta $0824			// $02 = "C"opy selected
+          lda $082c			// check if half tracks selected $80/$00 "Y"/"N"
+          bmi l0976			// branch if hi bit set "Y" selected
+          
           lda #$50
           ldy #$02
-          bne l097a			// will this ever = zero ??? ////////////////////////////////////////////////////////
+          bne l097a			// this will never = zero so branch will always be taken. Skips next 2 instructions
 l0976:     
+		// Half tracks selected
 			lda #$51
           ldy #$01
-l097a:     
-			sta $0825
-          sty $0827
-          ldy #$c0		// start filling at $c000
-          ldx #$c6		// end filling at $c600
-          lda #$00		// fill with zero
-          jsr l155d		// using above parameters, fill $c000 - $c600 with zero
-          jsr l1880		// print 14 spaces 8 times ??
-          jsr l17d2		// print "source disk"
+l097a:	  sta $0825		// $50 = half tracks disabled $51 = half tracks enabled
+          sty $0827		// $02 = half tracks disabled $01 = half tracks enabled
+          
+          // blank $c000 to $c600
+          ldy #$c0						// start filling at $c000
+          ldx #$c6						// end filling at $c600
+          lda #$00						// fill with zero
+          jsr fill_memory_area			// $155d using above parameters, fill $c000 - $c600 with zero
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 time
+          jsr source_disk //$17d2			// print "source disk"
           lda $0823
           beq l09cd
 l0994:     
-			jsr l17be
+			jsr options  // $17be
           jsr l18aa
           .byte $59,$2f,$4e,$00		// "Y/N"
           jsr l1a2d		// cli, set $0823 to zero, send $04 on user port
@@ -352,7 +368,7 @@ l0a4f:
           cmp $0825
           bne l09e9
           jsr l1aac    //switch BASIC out and kernal in
-          lda $082c
+          lda $082c		// half tracks Y/N $80/$00
           bpl l0a62
           jsr l1ce9
 l0a62:     
@@ -438,8 +454,8 @@ l0aff:
           bne l0b24
           lda $0833
           beq l0b12
-          jsr l1880
-          jsr l17d2
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
+          jsr source_disk					//$17d2
           jsr l1838
 l0b12:     
 			jsr l1ab2
@@ -448,12 +464,12 @@ l0b12:
           ldy #$c5
           ldx #$d0
           lda #$00
-          jsr l155d
+          jsr fill_memory_area		// $155d fill $c500 to $d000 with $00
 l0b24:     
 			ldy #$00
           lda ($fe),y
           bne l0b5d
-          lda $082b
+          lda $082b		// synchronised tracks Y/N $80/$00
           bpl l0b5d
           lda $0829
           bne l0b5d
@@ -588,7 +604,7 @@ l0c30:
           jsr l1ecb    //switch user port to output, send contents of A then switch to input 
           jsr l1ef6
           jsr l1f04
-          jsr l1880
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
           jsr l1abe
           jsr l1838
           jmp l08b3
@@ -865,7 +881,7 @@ l0e69:     jsr l1aac    //switch BASIC out and kernal in
           lda ($fe),y
           sta $0829
           bne l0e80
-          lda $082b
+          lda $082b		// synchronised tracks Y/N $80/$00
           bpl l0e80
           jsr l0c4f
 l0e80:     jsr l1f04
@@ -892,8 +908,8 @@ l0eb0:     lda $0832
           lda $f8
           bne l0ec8
           jsr l1f04
-          jsr l1880
-          jsr l17f5
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
+          jsr destination_disk:   // $17f5 
           jsr l1838
           jsr l1eea
 l0ec8:     jsr l1ab2
@@ -903,7 +919,7 @@ l0ec8:     jsr l1ab2
           ldy #$00
           lda ($fe),y
           bne l0f42
-          lda $082b
+          lda $082b		// synchronised tracks Y/N $80/$00
           bpl l0f42
           lda $0829
           bne l0f42
@@ -1006,7 +1022,7 @@ l0f9f:     ldy #$01
           ldy #$e0
           ldx #$00
           lda #$ff
-          jsr l155d
+          jsr fill_memory_area		// $155d fill $e000 to $0000 ($ffff) with $ff
           jsr l1ad4
           beq l0fcd
 l0fca:     jsr l1529
@@ -1061,14 +1077,14 @@ l1027:     lda $082e
           pla
           beq l1066
           jsr l1aac    //switch BASIC out and kernal in
-          jsr l1880
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
           jsr l1abe
           lda #$00
           jsr l1794
           lda $082a
           and #$10
           beq l1066
-          jsr l17f5
+          jsr destination_disk:   // $17f5 
           jsr l1838
           jsr l1ab2
           jmp l1003
@@ -1181,7 +1197,7 @@ l1135:     dec $0830
           beq l1169
 l113a:     lda $0829
           bne l1166
-          lda $082b
+          lda $082b		// synchronised tracks Y/N $80/$00
           bpl l1166
           lda $0826
           pha
@@ -1198,7 +1214,7 @@ l113a:     lda $0829
           jmp l0ee6
 l1166:     jmp l1003
 l1169:     jsr l1aac    //switch BASIC out and kernal in
-          jsr l1880
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
           jsr l1abe
           lda #$00
           jsr l1794
@@ -1227,7 +1243,7 @@ l11b5:     jsr l18aa
           
 l11cc:     lda #$92		// RVS off
           jsr chrout
-          jsr l17be
+          jsr options  // $17be
           jsr l18aa
           .byte $52,$2f,$49,$00		// "R/I" (retry or ignore)
 l11db:     jsr l1a31
@@ -1265,12 +1281,12 @@ l1220:     ldy #$01
           ldy #$e0
           ldx #$e8
           lda #$ff
-          jsr l155d
+          jsr fill_memory_area		// $155d fill $e000 to $e800 with $ff
           sec
           ldy #$e8
           ldx #$00
           lda #$55
-          jsr l155d
+          jsr fill_memory_area		// $155d fill $e800 to $0000 ($ffff) with $55
           lda #$01
           sta ridata
           sta riprty
@@ -1289,14 +1305,14 @@ l1220:     ldy #$01
           pla
           beq l1285
           jsr l1aac    //switch BASIC out and kernal in
-          jsr l1880
+          jsr blank_actions_area_of_screen // $1880		// print $14 spaces 7 times
           jsr l1abe
           lda #$00
           jsr l1794
           lda $082a
           and #$10
           beq l1285
-          jsr l17f5
+          jsr destination_disk:   // $17f5 
           jsr l1838
           jsr l1ab2
           jmp l1210
@@ -1659,7 +1675,9 @@ l1554:     inc $b0
           bne l154b
           rts
           
-l155d:     sty eah
+fill_memory_area:     
+
+			sty eah
           ldy #$00
           sty eal
 l1563:     sta (eal),y
@@ -1712,7 +1730,7 @@ l15b8:     clc
           .byte $92 				//RVS off
           .text "YNCHRONISED TRACKS"
           .byte $01,$0a,$20,$00	// marker, 10x space, marker bottom left corner
-          lda $082b
+          lda $082b				// synchronised tracks Y/N $80/$00
 	      jsr $1658
 	      jsr $18aa
           
@@ -1722,7 +1740,7 @@ l15b8:     clc
           .byte $92 				//RVS off
           .text "ALF TRACKS"          
           .byte $01,$12,$20,$00          
-          lda $082c
+          lda $082c				// half tracks Y/N $80/$00
           jsr $1658
           jsr $18aa
           
@@ -1827,7 +1845,7 @@ l1729:     clc
           jsr plot
           jsr l18aa
           
-          /////////////////              This section is prints the lower part of the screen
+          /////////////////              This section prints the lower part of the screen
           
           .byte $98,$01									//grey 2
           .byte $09,$30,$01								//nine times, "0", marker
@@ -1856,44 +1874,54 @@ l1794:     clc
           clc
           jmp plot
           
-l179e:     lda #$00
-          jsr l1794		//add $0a to A, tax, Y=#$13, plot
+please_insert: // $179e:     
+			
+			lda #$00
+          jsr l1794					//add $0a to A, tax, Y=#$13, plot
           jsr l18aa
           .byte $20,$20,$20
-          .byte $12	//RVS on
+          .byte $12					//RVS on
 			.text"PLEASE INSERT"
-          .byte $92	//RVS off
+          .byte $92					//RVS off
           .byte $20,$20,$20,$20,$00
           rts
                     
-l17be:     lda #$03
-          jsr l1794	//add $0a to A, tax, Y=#$13, plot
-          jsr l18aa	//prints below stuff on the screen
+options:  // $17be:     
+
+		  lda #$03
+          jsr l1794					//add $0a to A, tax, Y=#$13, plot
+          jsr l18aa					//prints below stuff on the screen
           .text" OPTIONS: "
           .byte $00
           rts
           
-l17d2:     jsr l179e
+source_disk: //$17d2:     
+
+			jsr please_insert 			// $179e
           lda #$01
-          jsr l1794		//add $0a to A, tax, Y=#$13, plot
+          jsr l1794					//add $0a to A, tax, Y=#$13, plot
           jsr l18aa
           .byte $20,$20,$20,$20
-          .byte $12	//RVS on
+          .byte $12					//RVS on
           .text"SOURCE DISK"
-l17ed:     .byte $92	//RVS off
+		  .byte $92					//RVS off
           .byte $20,$20,$20,$20,$20,$00
 			rts
           
-l17f5:     jsr l179e
-l17f8:     lda #$01
-          jsr l1794
+destination_disk:   // $17f5  
+
+			jsr please_insert			// $179e
+	      lda #$01
+          jsr l1794					// add $0a to A, tax, Y=#$13, plot
           jsr l18aa
-          .byte $20,$20,$12		//space x2, RVS on
+          .byte $20,$20,$12			// space x2, RVS on
           .text"DESTINATION DISK"
-          .byte $92,$20,$20,$00	//RVS off, space x2
+          .byte $92,$20,$20,$00		// RVS off, space x2
           rts
           
-l1818:     lda #$00
+choose_option: // $1818:     
+
+		  lda #$00
           jsr l1794		//add $0a to A, tax, Y=#$13, plot
           jsr l18aa
           .byte $12		//RVS on
@@ -1901,14 +1929,14 @@ l1818:     lda #$00
           .byte $92,$00	//RVS off and end marker
           rts
           
-l1838:     lda #$06
+l1838:     lda #$06		// 0000 0110
           sta $02
           lda #$00
           sta cntdn		//$A5
           sta ndx			//$C6
           
 l1842:     lda cntdn
-          eor #$ff		// 1 eor 1 =0, 0 eor 0 =0, others =1
+          eor #$ff		// flip the bits of cntdn
           sta cntdn
           bne l184f		// if cntdn=0 then RVS on. If it = $FF then skip next instruction (leave RVS off)
           lda #$12		//RVS on
@@ -1929,19 +1957,21 @@ l1878:     jsr getin
           bne l1842		// no - go back up
           rts
           
-l1880:     lda #$00
+blank_actions_area_of_screen:
+	     lda #$00
           sta $1893
-l1885:     jsr l1894		// print 14 spaces
+l1885:     jsr l1894		// print $14 spaces
           inc $1893
           lda $1893
-          cmp #$07		// print the above 14 spaces, 7 times
+          cmp #$07		// print the above $14 spaces, 7 times
           bne l1885
           rts
           
-          brk
+l1893:     brk
+
 l1894:     jsr l1794		//add $0a to A, tax, Y=#$13, plot
           jsr l18aa
-          .byte $01,$14,$20,$00	// $14 spaces
+          .byte $01,$14,$20,$00	// marker, PRINT x, char to print, marker. ($14 spaces)
           rts
           
 l189f:     ldy #$c0		// delay for $c000 countdown
@@ -2035,7 +2065,7 @@ l1910:     lda #$57		// "W" used for memory write command
           jsr unlstn		//send $006A,$01,$05 then unlisten
           
 l192c:     jsr l19e5		//initialise drive and RTS if OK.
-          lda #$49		// "I"
+          lda #$49		// "I" or is it $40 (Control code for TALK) + (device $09)?
           jsr iecout		//$FFA8 -> $EDDD output 1 char to serial bus or send already buffered char
           jmp unlstn		//$FFAB -> $EDFE send last buffered char with End Or Identify (EOI)
           
@@ -2144,8 +2174,10 @@ l19e5:     lda #$00		// clear STATUS location
 					    	// 0010 0000 = $20
 					    // 0000 1000 = $08
 					    // 0010 1000 = $28
+					    // $28= $20 (Control code for LISTEN) + $08 (device 8)
 				        
-          lda #$6f		// 0110 1111 according to Bill Bremner article in YC22 p57, bits 5 and 6 are
+          lda #$6f		// $6f= $60 (Control code for OPEN CHANNEL / DATA) + $0f (ch 15)
+          				// 0110 1111 according to Bill Bremner article in YC22 p57, bits 5 and 6 are
           				// set then secondary address is ORed with $60) = $6F before calling LSTNSA
           
           jsr lstnsa		// FF93 -> $EDB9. Sends secondary address from Accumulator
@@ -2757,7 +2789,7 @@ l1e24:     sta $0030,y
           iny
           cpy #$10
           bne l1e24
-          bit $082c
+          bit $082c			// half tracks Y/N $80/$00
           bmi l1e51
 l1e31:     lda (eal),y
           beq l1e92
@@ -2938,21 +2970,21 @@ l1f41:    lda (eal),y		//source addr $1fb6,y
           dex
           bne l1f41
           		
-		        //fill de00-deff and df00-dfff with byte patterns--------------------
+		        // fill de00-deff and df00-dfff with byte patterns--------------------
 l1f4f:     txa
-				//get rid of two LSBs 
-          lsr			//divide by 2
-          lsr			//divide by 2 again
-          and #$27		//0010 0111
-          cmp #$20		//0010 0000
-          bcc l1f66		//is it < $20
-          beq l1f64		//= $20
+				// get rid of two LSBs 
+          lsr			// divide by 2
+          lsr			// divide by 2 again
+          and #$27		// 0010 0111
+          cmp #$20		// 0010 0000
+          bcc l1f66		// branch if A < $20
+          beq l1f64		// branch if = $20
           cmp #$27		// 0010 0111
-          beq l1f62		//= $27
+          beq l1f62		// = $27
           lda #$c0		
           bne l1f66
-l1f62:     ora #$2f		//0010 1111
-l1f64:    eor #$a0		//1010 0000
+l1f62:     ora #$2f		// 0010 1111
+l1f64:    eor #$a0		// 1010 0000
 l1f66:     sta $df00,x
           txa
           lsr
@@ -2963,7 +2995,7 @@ l1f66:     sta $df00,x
           lsr
           lsr
           lsr
-          and #$07		//0000 0111
+          and #$07		// 0000 0111
           sta $de00,x
           inx
           bne l1f4f
@@ -2974,17 +3006,18 @@ l1f7f:     txa
           lsr
           lsr
           lsr
-          tay
-          lda $1f96,y
-          ldy #$08
-l1f89:     sta $dd00,x
-          asl 
-          inx
-          dey
-          bne l1f89
-          cpx #$00
-          bne l1f7f
-          rts		// go back to $081d ??
+          tay			// divide X by 16 and copy it to Y
+          lda $1f96,y		// get 1 byte from the below table indexed by Y
+          ldy #$08		// set Y to 8 for this loop. We're going to ASL 8 times on the same byte
+          
+l1f89:     sta $dd00,x	// store the value read from the table at $DD00 indexed by X
+          asl 			// 
+          inx			// increase $DD00 address
+          dey			// count down Y for this loop
+          bne l1f89		// go back up if Y <> zero
+          cpx #$00		// if Y=0 then check if X=0
+          bne l1f7f		// go back up if X<>0
+          rts			// go back to $081d ??
 l1f96:          
 			.byte $ff,$ff,$ff,$ff,$f0,$80,$c0,$80
 			.byte $ff,$80,$c0,$80,$f0,$80,$c0,$80
@@ -2995,32 +3028,34 @@ l1f96:
  						// the below section is copied to $D000         self-modifying code ??
 l1fb6:    sei
           lda #$eb		// sideways T
-          sta $180c		//destinati"O"n disk			////////////////////          No idea what's going on here
+          sta $180c		// destinati"O"n disk			////////////////////          No idea what's going on here
           ldy #$00
-          sty $1803		//"D"estination disk
-          ldx #$06
-l1fc3:     lda #$10
-l1fc5:     bit $180d
+          sty $1803		// "D"estination disk
+          
+          ldx #$06		// 6 pages ?
+l1fc3:     lda #$10		// 0001 0000
+l1fc5:     bit $180d		// Destinatio"N" Disk
           beq l1fc5
-          sta $180d
-          lda $1801
-          sta $0200,y
+          sta $180d		// Destinatio"N" Disk
+          lda $1801		// space $20
+          sta $0200,y		// fill $0200 to $07ff with spaces
           iny
           bne l1fc3
-          inc $01f6
+          inc $01f6		// this is in the stack
           dex
           bne l1fc3
-          lda #$24		//"$", BIT zero page
+          
+          lda #$24		// "$", BIT zero page
           sta $22
           iny
-          sty $1a04		//at $1a04 Y gets loaded into A and stored in $01
-          stx $1a05
-          stx $1a03
-          stx $1c03
+          sty $1a04		// at $1a04 $37 0011 0111 gets loaded into A and stored in $01	///// guesswork here /////
+          stx $1a05		// $1a05 is STA
+          stx $1a03		// $1a03 is LDA
+          stx $1c03		// $1c03 is the "$05" of sta $05
           lda #$ec		//lower right square, CPX
-          sta $1c0c
+          sta $1c0c		// changing a BNE offset ??
           lda #$23		//"#", RLA (oper,X)
-          sta $1a0b
+          sta $1a0b		// changing a BNE offset ??
           lda #$a0		//
           sta $1a00
           lda #$88
@@ -3058,7 +3093,8 @@ l2040:     tay
 l2041:     ldx $1c00
           bcc $2048
           inx
-          bit $ca			//this is a masked DEX command
+          .byte $24		// BIT
+l2048:    dex			// this is a masked DEX command
           txa
           and #$03
 l204c:     sta $85
@@ -3083,13 +3119,18 @@ l206f:     bvc l206f
           ldx $1a01
           sta $1a09
           jmp $02ee
+          
 l207b:     dec $87
           bmi l20c1
           jmp $02b8
+          
           lda #$60
-          bit $2ca9
-          bit $2fa9
-          bit $02a9
+          .byte $2c		// BIT
+          lda #$2c		// masked lda #$2c
+          .byte $2c		// BIT
+          lda #$2f		// masked lda #$2f
+          .byte $2c		// BIT
+          lda #$02		// masked lda #$02
           sta $02e6
           lda #$0a
           sta $87
@@ -3422,7 +3463,7 @@ l2358:     bit $180d
           lda $1801
           rts
           
-          jsr $05a8
+l2364:    jsr $05a8
           nop
           lda #$10
 l236a:     bit $180d
@@ -3437,12 +3478,13 @@ l2379:     bit $180d
           inc $1803
           rts
           
-          ldy #$ff
+l2385:    ldy #$ff
           sty $1803
           iny
           sty $1a08
           lda #$20
           rts
+          
           ldx #$00
 l2393:     jsr $057a
           beq l239d
@@ -3521,6 +3563,7 @@ l241b:     rts
 l2421:     bit $1805
           bmi l2421
           rts
+          
           lda $1c00
           ora #$04
           sta $1c00
